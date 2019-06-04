@@ -12,8 +12,8 @@ package main
 import (
 	"database/sql"
 	"errors"
-	"github.com/mumble-voip/grumble/pkg/acl"
-	"github.com/mumble-voip/grumble/pkg/ban"
+	"github.com/rasmus-z/grumble/pkg/acl"
+	"github.com/rasmus-z/grumble/pkg/ban"
 	"log"
 	"net"
 	"os"
