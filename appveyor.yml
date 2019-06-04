@@ -9,5 +9,5 @@ install:
   - go get -v -t ./...
 
 build_script:
-  - go build mumble.info/grumble/cmd/grumble
+  - go build github.com/rasmus-z/grumble/cmd/grumble
   - go test -v ./...

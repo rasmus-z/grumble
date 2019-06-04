@@ -7,5 +7,5 @@ go:
 go_import_path: mumble.info/grumble
 
 script:
-  - go build mumble.info/grumble/cmd/grumble
+  - go build github.com/rasmus-z/grumble/cmd/grumble
   - go test -v ./...

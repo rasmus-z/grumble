@@ -6,7 +6,7 @@ WORKDIR /go/src/mumble.info/grumble
 
 RUN apk add --no-cache git \
   && go get -v -t ./... \
-  && go build mumble.info/grumble/cmd/grumble \
+  && go build github.com/rasmus-z/grumble/cmd/grumble \
   && go test -v ./...
 
 FROM alpine:edge
