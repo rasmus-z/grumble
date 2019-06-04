@@ -6,7 +6,7 @@ package main
 
 import (
 	"encoding/hex"
-	"mumble.info/grumble/pkg/acl"
+	"github.com/mumble-voip/grumble/pkg/acl"
 )
 
 // A Mumble channel
@@ -41,38 +41,38 @@ func NewChannel(id int, name string) (channel *Channel) {
 	return
 }
 
-// AddChild adds a child channel to a channel
+// Add a child channel to a channel
 func (channel *Channel) AddChild(child *Channel) {
 	child.parent = channel
 	child.ACL.Parent = &channel.ACL
 	channel.children[child.Id] = child
 }
 
-// RemoveChild removes a child channel from a parent
+// Remove a child channel from a parent
 func (channel *Channel) RemoveChild(child *Channel) {
 	child.parent = nil
 	child.ACL.Parent = nil
 	delete(channel.children, child.Id)
 }
 
-// AddClient adds client
+// Add client
 func (channel *Channel) AddClient(client *Client) {
 	channel.clients[client.Session()] = client
 	client.Channel = channel
 }
 
-// RemoveClient removes client
+// Remove client
 func (channel *Channel) RemoveClient(client *Client) {
 	delete(channel.clients, client.Session())
 	client.Channel = nil
 }
 
-// HasDescription Does the channel have a description?
+// Does the channel have a description?
 func (channel *Channel) HasDescription() bool {
 	return len(channel.DescriptionBlob) > 0
 }
 
-// DescriptionBlobHashBytes gets the channel's blob hash as a byte slice for sending via a protobuf message.
+// Get the channel's blob hash as a byte slice for sending via a protobuf message.
 // Returns nil if there is no blob.
 func (channel *Channel) DescriptionBlobHashBytes() (buf []byte) {
 	buf, err := hex.DecodeString(channel.DescriptionBlob)
@@ -82,7 +82,7 @@ func (channel *Channel) DescriptionBlobHashBytes() (buf []byte) {
 	return buf
 }
 
-// AllLinks returns a slice of all channels in this channel's
+// Returns a slice of all channels in this channel's
 // link chain.
 func (channel *Channel) AllLinks() (seen map[int]*Channel) {
 	seen = make(map[int]*Channel)
@@ -100,7 +100,7 @@ func (channel *Channel) AllLinks() (seen map[int]*Channel) {
 	return
 }
 
-// AllSubChannels returns a slice of all of this channel's subchannels.
+// Returns a slice of all of this channel's subchannels.
 func (channel *Channel) AllSubChannels() (seen map[int]*Channel) {
 	seen = make(map[int]*Channel)
 	walk := []*Channel{}
@@ -120,12 +120,12 @@ func (channel *Channel) AllSubChannels() (seen map[int]*Channel) {
 	return
 }
 
-// IsTemporary checks whether the channel is temporary
+// Checks whether the channel is temporary
 func (channel *Channel) IsTemporary() bool {
 	return channel.temporary
 }
 
-// IsEmpty checks whether the channel is temporary
+// Checks whether the channel is temporary
 func (channel *Channel) IsEmpty() bool {
 	return len(channel.clients) == 0
 }

@@ -7,7 +7,6 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"crypto/rand"
 	"crypto/sha1"
 	"crypto/tls"
@@ -16,19 +15,17 @@ import (
 	"errors"
 	"fmt"
 	"github.com/golang/protobuf/proto"
+	"github.com/mumble-voip/grumble/pkg/acl"
+	"github.com/mumble-voip/grumble/pkg/ban"
+	"github.com/mumble-voip/grumble/pkg/freezer"
+	"github.com/mumble-voip/grumble/pkg/htmlfilter"
+	"github.com/mumble-voip/grumble/pkg/logtarget"
+	"github.com/mumble-voip/grumble/pkg/mumbleproto"
+	"github.com/mumble-voip/grumble/pkg/serverconf"
+	"github.com/mumble-voip/grumble/pkg/sessionpool"
 	"hash"
 	"log"
-	"mumble.info/grumble/pkg/acl"
-	"mumble.info/grumble/pkg/ban"
-	"mumble.info/grumble/pkg/freezer"
-	"mumble.info/grumble/pkg/htmlfilter"
-	"mumble.info/grumble/pkg/logtarget"
-	"mumble.info/grumble/pkg/mumbleproto"
-	"mumble.info/grumble/pkg/serverconf"
-	"mumble.info/grumble/pkg/sessionpool"
-	"mumble.info/grumble/pkg/web"
 	"net"
-	"net/http"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -37,7 +34,6 @@ import (
 
 // The default port a Murmur server listens on
 const DefaultPort = 64738
-const DefaultWebPort = 443
 const UDPPacketSize = 1024
 
 const LogOpsBeforeSync = 100
@@ -61,16 +57,13 @@ type KeyValuePair struct {
 type Server struct {
 	Id int64
 
-	tcpl      *net.TCPListener
-	tlsl      net.Listener
-	udpconn   *net.UDPConn
-	tlscfg    *tls.Config
-	webwsl    *web.Listener
-	webtlscfg *tls.Config
-	webhttp   *http.Server
-	bye       chan bool
-	netwg     sync.WaitGroup
-	running   bool
+	tcpl    *net.TCPListener
+	tlsl    net.Listener
+	udpconn *net.UDPConn
+	tlscfg  *tls.Config
+	bye     chan bool
+	netwg   sync.WaitGroup
+	running bool
 
 	incoming       chan *Message
 	voicebroadcast chan *VoiceBroadcast
@@ -165,7 +158,7 @@ func (server *Server) Debugf(format string, v ...interface{}) {
 	server.Printf(format, v...)
 }
 
-// RootChannel gets a pointer to the root channel
+// Get a pointer to the root channel
 func (server *Server) RootChannel() *Channel {
 	root, exists := server.Channels[0]
 	if !exists {
@@ -195,7 +188,7 @@ func (server *Server) SetSuperUserPassword(password string) {
 	server.cfgUpdate <- &KeyValuePair{Key: key, Value: val}
 }
 
-// CheckSuperUserPassword checks whether password matches the set SuperUser password.
+// Check whether password matches the set SuperUser password.
 func (server *Server) CheckSuperUserPassword(password string) bool {
 	parts := strings.Split(server.cfg.StringValue("SuperUserPassword"), "$")
 	if len(parts) != 3 {
@@ -263,30 +256,27 @@ func (server *Server) handleIncomingClient(conn net.Conn) (err error) {
 	client.user = nil
 
 	// Extract user's cert hash
-	// Only consider client certificates for direct connections, not WebSocket connections.
-	// We do not support TLS-level client certificates for WebSocket client.
-	if tlsconn, ok := client.conn.(*tls.Conn); ok {
-		err = tlsconn.Handshake()
-		if err != nil {
-			client.Printf("TLS handshake failed: %v", err)
-			client.Disconnect()
-			return
-		}
+	tlsconn := client.conn.(*tls.Conn)
+	err = tlsconn.Handshake()
+	if err != nil {
+		client.Printf("TLS handshake failed: %v", err)
+		client.Disconnect()
+		return
+	}
 
-		state := tlsconn.ConnectionState()
-		if len(state.PeerCertificates) > 0 {
-			hash := sha1.New()
-			hash.Write(state.PeerCertificates[0].Raw)
-			sum := hash.Sum(nil)
-			client.certHash = hex.EncodeToString(sum)
-		}
+	state := tlsconn.ConnectionState()
+	if len(state.PeerCertificates) > 0 {
+		hash := sha1.New()
+		hash.Write(state.PeerCertificates[0].Raw)
+		sum := hash.Sum(nil)
+		client.certHash = hex.EncodeToString(sum)
+	}
 
-		// Check whether the client's cert hash is banned
-		if server.IsCertHashBanned(client.CertHash()) {
-			client.Printf("Certificate hash is banned")
-			client.Disconnect()
-			return
-		}
+	// Check whether the client's cert hash is banned
+	if server.IsCertHashBanned(client.CertHash()) {
+		client.Printf("Certificate hash is banned")
+		client.Disconnect()
+		return
 	}
 
 	// Launch network readers
@@ -296,7 +286,7 @@ func (server *Server) handleIncomingClient(conn net.Conn) (err error) {
 	return
 }
 
-// RemoveClient removes a disconnected client from the server's
+// Remove a disconnected client from the server's
 // internal representation.
 func (server *Server) RemoveClient(client *Client, kicked bool) {
 	server.hmutex.Lock()
@@ -336,7 +326,7 @@ func (server *Server) RemoveClient(client *Client, kicked bool) {
 	}
 }
 
-// AddChannel adds a new channel to the server. Automatically assign it a channel ID.
+// Add a new channel to the server. Automatically assign it a channel ID.
 func (server *Server) AddChannel(name string) (channel *Channel) {
 	channel = NewChannel(server.nextChanId, name)
 	server.Channels[channel.Id] = channel
@@ -345,7 +335,7 @@ func (server *Server) AddChannel(name string) (channel *Channel) {
 	return
 }
 
-// RemoveChanel removes a channel from the server.
+// Remove a channel from the server.
 func (server *Server) RemoveChanel(channel *Channel) {
 	if channel.Id == 0 {
 		server.Printf("Attempted to remove root channel.")
@@ -1047,7 +1037,7 @@ func (server *Server) handleUdpPacket(udpaddr *net.UDPAddr, buf []byte) {
 	match.udprecv <- plain
 }
 
-// ClearCaches clears the Server's caches
+// Clear the Server's caches
 func (server *Server) ClearCaches() {
 	for _, client := range server.clients {
 		client.ClearCaches()
@@ -1100,7 +1090,7 @@ func (s *Server) RegisterClient(client *Client) (uid uint32, err error) {
 	}
 
 	// Grumble can only register users with certificates.
-	if !client.HasCertificate() {
+	if client.HasCertificate() {
 		return 0, errors.New("no cert hash")
 	}
 
@@ -1115,7 +1105,7 @@ func (s *Server) RegisterClient(client *Client) (uid uint32, err error) {
 	return uid, nil
 }
 
-// RemoveRegistration removes a registered user.
+// Remove a registered user.
 func (s *Server) RemoveRegistration(uid uint32) (err error) {
 	user, ok := s.Users[uid]
 	if !ok {
@@ -1162,7 +1152,7 @@ func (s *Server) removeRegisteredUserFromChannel(uid uint32, channel *Channel) {
 	}
 }
 
-// RemoveChannel removes a channel
+// Remove a channel
 func (server *Server) RemoveChannel(channel *Channel) {
 	// Can't remove root
 	if channel == server.RootChannel() {
@@ -1207,7 +1197,7 @@ func (server *Server) RemoveChannel(channel *Channel) {
 	}
 }
 
-// RemoveExpiredBans removes expired bans
+// Remove expired bans
 func (server *Server) RemoveExpiredBans() {
 	server.banlock.Lock()
 	defer server.banlock.Unlock()
@@ -1228,7 +1218,7 @@ func (server *Server) RemoveExpiredBans() {
 	}
 }
 
-// IsConnectionBanned Is the incoming connection conn banned?
+// Is the incoming connection conn banned?
 func (server *Server) IsConnectionBanned(conn net.Conn) bool {
 	server.banlock.RLock()
 	defer server.banlock.RUnlock()
@@ -1243,7 +1233,7 @@ func (server *Server) IsConnectionBanned(conn net.Conn) bool {
 	return false
 }
 
-// IsCertHashBanned Is the certificate hash banned?
+// Is the certificate hash banned?
 func (server *Server) IsCertHashBanned(hash string) bool {
 	server.banlock.RLock()
 	defer server.banlock.RUnlock()
@@ -1268,12 +1258,12 @@ func (server *Server) FilterText(text string) (filtered string, err error) {
 }
 
 // The accept loop of the server.
-func (server *Server) acceptLoop(listener net.Listener) {
+func (server *Server) acceptLoop() {
 	defer server.netwg.Done()
 
 	for {
 		// New client connected
-		conn, err := listener.Accept()
+		conn, err := server.tlsl.Accept()
 		if err != nil {
 			if isTimeout(err) {
 				continue
@@ -1344,8 +1334,8 @@ func (server *Server) cleanPerLaunchData() {
 	server.clientAuthenticated = nil
 }
 
-// Port returns the port the native server will listen on when it is
-// started.
+// Returns the port the server will listen on when it is
+// started. Returns 0 on failure.
 func (server *Server) Port() int {
 	port := server.cfg.IntValue("Port")
 	if port == 0 {
@@ -1354,17 +1344,7 @@ func (server *Server) Port() int {
 	return port
 }
 
-// WebPort returns the port the web server will listen on when it is
-// started.
-func (server *Server) WebPort() int {
-	port := server.cfg.IntValue("WebPort")
-	if port == 0 {
-		return DefaultWebPort + int(server.Id) - 1
-	}
-	return port
-}
-
-// CurrentPort returns the port the native server is currently listening
+// Returns the port the server is currently listning
 // on.  If called when the server is not running,
 // this function returns -1.
 func (server *Server) CurrentPort() int {
@@ -1375,7 +1355,7 @@ func (server *Server) CurrentPort() int {
 	return tcpaddr.Port
 }
 
-// HostAddress returns the host address the server will listen on when
+// Returns the host address the server will listen on when
 // it is started. This must be an IP address, either IPv4
 // or IPv6.
 func (server *Server) HostAddress() string {
@@ -1394,7 +1374,6 @@ func (server *Server) Start() (err error) {
 
 	host := server.HostAddress()
 	port := server.Port()
-	webport := server.WebPort()
 
 	// Setup our UDP listener
 	server.udpconn, err = net.ListenUDP("udp", &net.UDPAddr{IP: net.ParseIP(host), Port: port})
@@ -1433,37 +1412,7 @@ func (server *Server) Start() (err error) {
 	}
 	server.tlsl = tls.NewListener(server.tcpl, server.tlscfg)
 
-	// Create HTTP server and WebSocket "listener"
-	webaddr := &net.TCPAddr{IP: net.ParseIP(host), Port: webport}
-	server.webtlscfg = &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		ClientAuth:   tls.NoClientCert,
-		NextProtos:   []string{"http/1.1"},
-	}
-	server.webwsl = web.NewListener(webaddr, server.Logger)
-	mux := http.NewServeMux()
-	mux.Handle("/", server.webwsl)
-	server.webhttp = &http.Server{
-		Addr:      webaddr.String(),
-		Handler:   mux,
-		TLSConfig: server.webtlscfg,
-		ErrorLog:  server.Logger,
-
-		// Set sensible timeouts, in case no reverse proxy is in front of Grumble.
-		// Non-conforming (or malicious) clients may otherwise block indefinitely and cause
-		// file descriptors (or handles, depending on your OS) to leak and/or be exhausted
-		ReadTimeout: 5 * time.Second,
-		WriteTimeout: 10 * time.Second,
-		IdleTimeout: 2 * time.Minute,
-	}
-	go func() {
-		err := server.webhttp.ListenAndServeTLS("", "")
-		if err != http.ErrServerClosed {
-			server.Fatalf("Fatal HTTP server error: %v", err)
-		}
-	}()
-
-	server.Printf("Started: listening on %v and %v", server.tcpl.Addr(), server.webwsl.Addr())
+	server.Printf("Started: listening on %v", server.tcpl.Addr())
 	server.running = true
 
 	// Open a fresh freezer log
@@ -1479,17 +1428,16 @@ func (server *Server) Start() (err error) {
 	// Launch the event handler goroutine
 	go server.handlerLoop()
 
-	// Add the three network receiver goroutines to the net waitgroup
+	// Add the two network receiver goroutines to the net waitgroup
 	// and launch them.
 	//
 	// We use the waitgroup to provide a blocking Stop() method
 	// for the servers. Each network goroutine defers a call to
 	// netwg.Done(). In the Stop() we close all the connections
 	// and call netwg.Wait() to wait for the goroutines to end.
-	server.netwg.Add(3)
+	server.netwg.Add(2)
 	go server.udpListenLoop()
-	go server.acceptLoop(server.tlsl)
-	go server.acceptLoop(server.webwsl)
+	go server.acceptLoop()
 
 	// Schedule a server registration update (if needed)
 	go func() {
@@ -1513,30 +1461,12 @@ func (server *Server) Stop() (err error) {
 		client.Disconnect()
 	}
 
-	// Wait for the HTTP server to shutdown gracefully
-	// A client could theoretically block the server from ever stopping by
-	// never letting the HTTP connection go idle, so we give 15 seconds of grace time.
-	// This does not apply to opened WebSockets, which were forcibly closed when
-	// all clients were disconnected.
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(15*time.Second))
-	err = server.webhttp.Shutdown(ctx)
-	cancel()
-	if err == context.DeadlineExceeded {
-		server.Println("Forcibly shutdown HTTP server while stopping")
-	} else if err != nil {
-		return err
-	}
-
-	// Close the listeners
+	// Close the TLS listener and the TCP listener
 	err = server.tlsl.Close()
 	if err != nil {
 		return err
 	}
 	err = server.tcpl.Close()
-	if err != nil {
-		return err
-	}
-	err = server.webwsl.Close()
 	if err != nil {
 		return err
 	}
@@ -1555,7 +1485,7 @@ func (server *Server) Stop() (err error) {
 		server.Fatal(err)
 	}
 
-	// Wait for the three network receiver
+	// Wait for the two network receiver
 	// goroutines end.
 	server.netwg.Wait()
 

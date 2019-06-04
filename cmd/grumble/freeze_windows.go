@@ -6,9 +6,8 @@ package main
 
 import (
 	"github.com/golang/protobuf/proto"
+	"github.com/mumble-voip/grumble/pkg/replacefile"
 	"io/ioutil"
-	"mumble.info/grumble/pkg/replacefile"
-	"os"
 	"path/filepath"
 	"strconv"
 )
@@ -51,16 +50,9 @@ func (server *Server) freezeToFile() (err error) {
 	src := f.Name()
 	dst := filepath.Join(Args.DataDir, "servers", strconv.FormatInt(server.Id, 10), "main.fz")
 	backup := filepath.Join(Args.DataDir, "servers", strconv.FormatInt(server.Id, 10), "backup.fz")
-
 	err = replacefile.ReplaceFile(dst, src, backup, replacefile.Flag(0))
-	// If the dst file does not exist (as in, on first launch)
-	// fall back to os.Rename. ReplaceFile does not work if the
-	// dst file is not there.
-	if os.IsNotExist(err) {
-		err = os.Rename(src, dst)
-		if err != nil {
-			return err
-		}
+	if err != nil {
+		return err
 	}
 
 	return nil

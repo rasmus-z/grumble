@@ -7,9 +7,9 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/mumble-voip/grumble/pkg/blobstore"
+	"github.com/mumble-voip/grumble/pkg/logtarget"
 	"log"
-	"mumble.info/grumble/pkg/blobstore"
-	"mumble.info/grumble/pkg/logtarget"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -30,7 +30,7 @@ func main() {
 	// Open the data dir to check whether it exists.
 	dataDir, err := os.Open(Args.DataDir)
 	if err != nil {
-		log.Fatalf("Unable to open data directory (%v): %v", Args.DataDir, err)
+		log.Fatalf("Unable to open data directory: %v", err)
 		return
 	}
 	dataDir.Close()
@@ -38,7 +38,7 @@ func main() {
 	// Set up logging
 	err = logtarget.Target.OpenFile(Args.LogPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Unable to open log file (%v): %v", Args.LogPath, err)
+		fmt.Fprintf(os.Stderr, "Unable to open log file: %v", err)
 		return
 	}
 	log.SetPrefix("[G] ")
@@ -56,7 +56,7 @@ func main() {
 	blobDir := filepath.Join(Args.DataDir, "blob")
 	err = os.Mkdir(blobDir, 0700)
 	if err != nil && !os.IsExist(err) {
-		log.Fatalf("Unable to create blob directory (%v): %v", blobDir, err)
+		log.Fatalf("Unable to create blob directory: %v", err)
 	}
 	blobStore = blobstore.Open(blobDir)
 

@@ -4,7 +4,7 @@
 
 package main
 
-import "mumble.info/grumble/pkg/acl"
+import "github.com/mumble-voip/grumble/pkg/acl"
 
 // A VoiceTarget holds information about a single
 // VoiceTarget entry of a Client.
@@ -28,7 +28,7 @@ func (vt *VoiceTarget) AddSession(session uint32) {
 	vt.sessions = append(vt.sessions, session)
 }
 
-// AddChannel adds a channel to the VoiceTarget.
+// Add a channel to the VoiceTarget.
 // If subchannels is true, any sent voice packets will also be sent to all subchannels.
 // If links is true, any sent voice packets will also be sent to all linked channels.
 // If group is a non-empty string, any sent voice packets will only be broadcast to members
@@ -42,12 +42,12 @@ func (vt *VoiceTarget) AddChannel(id uint32, subchannels bool, links bool, group
 	})
 }
 
-// IsEmpty checks whether the VoiceTarget is empty (has no targets)
+// Checks whether the VoiceTarget is empty (has no targets)
 func (vt *VoiceTarget) IsEmpty() bool {
 	return len(vt.sessions) == 0 && len(vt.channels) == 0
 }
 
-// ClearCache clears the VoiceTarget's cache.
+// Clear the VoiceTarget's cache.
 func (vt *VoiceTarget) ClearCache() {
 	vt.directCache = nil
 	vt.fromChannelsCache = nil

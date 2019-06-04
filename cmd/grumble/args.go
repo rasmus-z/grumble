@@ -9,11 +9,10 @@ import (
 )
 
 type UsageArgs struct {
-	Version        string
-	BuildDate      string
-	OS             string
-	Arch           string
-	DefaultDataDir string
+	Version   string
+	BuildDate string
+	OS        string
+	Arch      string
 }
 
 var usageTmpl = `usage: grumble [options]
@@ -24,7 +23,7 @@ var usageTmpl = `usage: grumble [options]
  --help
      Shows this help listing.
 
- --datadir <data-dir> (default: {{.DefaultDataDir}})
+ --datadir <data-dir> (default: $HOME/.grumble)
      Directory to use for server storage.
 
  --log <log-path> (default: $DATADIR/grumble.log)
@@ -55,12 +54,11 @@ type args struct {
 }
 
 func defaultDataDir() string {
-	homedir := os.Getenv("HOME")
 	dirname := ".grumble"
 	if runtime.GOOS == "windows" {
-		homedir = os.Getenv("USERPROFILE")
+		dirname = "grumble"
 	}
-	return filepath.Join(homedir, dirname)
+	return filepath.Join(os.Getenv("HOME"), dirname)
 }
 
 func defaultLogPath() string {
@@ -74,11 +72,10 @@ func Usage() {
 	}
 
 	err = t.Execute(os.Stdout, UsageArgs{
-		Version:        version,
-		BuildDate:      buildDate,
-		OS:             runtime.GOOS,
-		Arch:           runtime.GOARCH,
-		DefaultDataDir: defaultDataDir(),
+		Version:   version,
+		BuildDate: buildDate,
+		OS:        runtime.GOOS,
+		Arch:      runtime.GOARCH,
 	})
 	if err != nil {
 		panic("unable to execute usage template")

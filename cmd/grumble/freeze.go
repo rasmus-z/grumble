@@ -7,14 +7,14 @@ package main
 import (
 	"errors"
 	"github.com/golang/protobuf/proto"
+	"github.com/mumble-voip/grumble/pkg/acl"
+	"github.com/mumble-voip/grumble/pkg/ban"
+	"github.com/mumble-voip/grumble/pkg/freezer"
+	"github.com/mumble-voip/grumble/pkg/mumbleproto"
+	"github.com/mumble-voip/grumble/pkg/serverconf"
 	"io"
 	"io/ioutil"
 	"log"
-	"mumble.info/grumble/pkg/acl"
-	"mumble.info/grumble/pkg/ban"
-	"mumble.info/grumble/pkg/freezer"
-	"mumble.info/grumble/pkg/mumbleproto"
-	"mumble.info/grumble/pkg/serverconf"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -776,7 +776,7 @@ func (server *Server) UpdateFrozenChannel(channel *Channel, state *mumbleproto.C
 	server.numLogOps += 1
 }
 
-// UpdateFrozenChannelACLs writes a channel's ACL and Group data to disk. Mumble doesn't support
+// Write a channel's ACL and Group data to disk. Mumble doesn't support
 // incremental ACL updates and as such we must write all ACLs and groups
 // to the datastore on each change.
 func (server *Server) UpdateFrozenChannelACLs(channel *Channel) {
@@ -821,7 +821,7 @@ func (server *Server) DeleteFrozenChannel(channel *Channel) {
 	server.numLogOps += 1
 }
 
-// UpdateFrozenBans writes the server's banlist to the datastore.
+// Write the server's banlist to the datastore.
 func (server *Server) UpdateFrozenBans(bans []ban.Ban) {
 	fbl := &freezer.BanList{}
 	for _, ban := range server.Bans {
@@ -834,7 +834,7 @@ func (server *Server) UpdateFrozenBans(bans []ban.Ban) {
 	server.numLogOps += 1
 }
 
-// UpdateConfig writes an updated config value to the datastore.
+// Write an updated config value to the datastore.
 func (server *Server) UpdateConfig(key, value string) {
 	fcfg := &freezer.ConfigKeyValuePair{
 		Key:   proto.String(key),
@@ -847,7 +847,7 @@ func (server *Server) UpdateConfig(key, value string) {
 	server.numLogOps += 1
 }
 
-// ResetConfig writes to the freezelog that the config with key
+// Write to the freezelog that the config with key
 // has been reset to its default value.
 func (server *Server) ResetConfig(key string) {
 	fcfg := &freezer.ConfigKeyValuePair{
